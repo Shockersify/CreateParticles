@@ -1,36 +1,24 @@
 % CreateAtoms.m
 % Author: Cameron Shock
-% Description: Create atom data files for LAMMPS. First construct the
-% polymer cell matrix which consists of arrays of whatever atom types you
-% want. Next numOfPolymers determines the number of each polymer chain you
-% want. The next section is defining all of properties for each atom type
-% (each column for each type). Next you can do anything before or after the
-% main loop but the main loop should remain untouched unless you know what
-% you're doing (like you need to change a certain variable). It will then
-% create the atom data files you want.
+% Description: Create atom data files for LAMMPS. Use the myscript.m file
+% or your own as an interface with this function. Parameters required and
+% properties are structs and filename is a string.
+% required must contain: box, masses, polymers, numOfPolymers, bondTypes.
+% properties contains the properties of each particle type.
 
-box = [0.0000,10.0000;0.0000,10.0000;0.0000,10.0000]; %box dimensions
-% info based on polymer sets
-polymers = {[1],[2]};
-numOfPolymers = [10, 10];
-bondTypes = 0;
-atomTypes = max(cell2mat(polymers));
+function atoms = CreateAtoms(required,properties,filename)
 
-
-% info based on atom types
-charge = [9.3571, -9.3571];
-moment = [0.3896, 0.3896];
-diameter = [2.4, 1.8];
-density = [1, 1];
-masses = [50, 50];
-
-
-for m = 0.5:0.5:5
-    momentUSE = m*moment;
-    filename = ['../IonicLiquids/Solvation9A12C14/atoms' num2str(m*10,'%02d') 'D1E.txt'];
-
-    
     % MAIN PART OF CODE DO NOT TOUCH*********************************
+
+    bondType = 1;
+    atomTypes = max(cell2mat(required.polymers));
+    totalcolumns = numel(fieldnames(properties)) + 2;
+    if any(strcmp(fieldnames(properties),'position'))
+        totalcolumns = totalcolumns + 2;
+    end
+    if any(strcmp(fieldnames(properties),'moment'))
+        totalcolumns = totalcolumns + 2;
+    end
 
     % start particle id sequence
     atomMatrix = [];
@@ -39,42 +27,80 @@ for m = 0.5:0.5:5
     lastID = 0;
     offset = 0;
 
+    ion = -1.0;
     % for each polymer chain
-    for polymer = 1:numel(polymers)
+    for polymer = 1:numel(required.polymers)
         % for the total number of this particular polymer chain
-        for n = 1:numOfPolymers(polymer)
+        for n = 1:required.numOfPolymers(polymer)
             % initialize matrix holding polymer group info
-            polymerGroupInfo = ones(numel(cell2mat(polymers(polymer))),12);
+            polymerGroupInfo = ones(numel(cell2mat(required.polymers(polymer))),totalcolumns);
             % for each element in this particular polymer chain
-            for element = 1:numel(cell2mat(polymers(polymer)))
-                types = cell2mat(polymers(polymer));
-
+            for element = 1:numel(cell2mat(required.polymers(polymer)))
+                types = cell2mat(required.polymers(polymer));
+                
+                %polymerGroupInfo(element,:) = [id, types(element)];
+                info = [id, types(element)];
+                propertyFields = (fieldnames(properties));
+                propertyValues = struct2cell(properties);
+                momentPosition = 0;
+                prop = 2;
+                for property = 1:numel(propertyFields)
+                    prop = prop + 1;
+                    pVal = cell2mat(propertyValues(property));
+                    thing = pVal(types(element));
+                    if isequal(cell2mat(propertyFields(property)), 'position')
+                        thing = [1,1,1];
+                        positionPosition = prop;
+                        prop = prop + 2;
+                    end
+                    if isequal(cell2mat(propertyFields(property)), 'moment')
+                        thing = [1,1,1];
+                        momentPosition = prop;
+                        prop = prop + 2;
+                    end
+                    if isequal(cell2mat(propertyFields(property)), 'molecule')
+                        thing = n+offset;
+                    end
+                    info = [info thing];
+                    
+                end
+                
                 % create the polymer group info matrix holding all information
                 % about each particle
-                polymerGroupInfo(element,:) = [id, types(element), 1, 1, 1, diameter(types(element)), density(types(element)), charge(types(element)), 1, 1, 1, n + offset];
+                polymerGroupInfo(element,:) = info;
                 id = id + 1;
             end
-            
+
             % randomly generate positions and moments then create bond
             % matrix
-            positions = MakePositions(polymerGroupInfo(:,1:2), box, diameter);
-            moments = MakeMoments(polymerGroupInfo(:,1:2), momentUSE);
-            bonds = MakeBonds(polymerGroupInfo(:,1), bondTypes, lastID);
+            if isfield(required,'ionspace') && polymer >= numel(required.polymers)-1
+                positions = MakePositionsIonSplit(polymerGroupInfo(:,1:2), required.box, properties.diameter,required.ionspace,ion);
+                ion = 1.0;
+            elseif isfield(properties,'diameter')
+                positions = MakePositions(polymerGroupInfo(:,1:2), required.box, properties.diameter);
+            else
+                positions = MakePositions(polymerGroupInfo(:,1:2), required.box, ones(atomTypes,1));
+            end
+            polymerGroupInfo(:,positionPosition:positionPosition+2) = positions;
+            if momentPosition ~= 0
+                moments = MakeMoments(polymerGroupInfo(:,1:2), properties.moment);
+                polymerGroupInfo(:,momentPosition:momentPosition+2) = moments;
+            end
+            bonds = MakeBonds(polymerGroupInfo(:,1), bondType, lastID);
             if size(bonds,1) > 0
                 lastID = bonds(end,1);
             end
 
             % replace initialization data in polymer group info with actual
-            polymerGroupInfo(:,3:5) = positions;
-            polymerGroupInfo(:,9:11) = moments;
+
             atomMatrix = [atomMatrix;polymerGroupInfo];
             bondMatrix = [bondMatrix;bonds];
         end
-        offset = offset + numOfPolymers(polymer);
+        offset = offset + required.numOfPolymers(polymer);
     end
-    
-    MakeFile(atomMatrix,bondMatrix,atomTypes,bondTypes,masses,box,filename);
-    
+
+    MakeFile(atomMatrix,bondMatrix,atomTypes,bondType,required.masses,required.box,filename);
+
     % END OF UNTOUCHABLE CODE**************************************
-    
+
 end

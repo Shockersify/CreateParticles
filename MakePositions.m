@@ -30,7 +30,7 @@ function positions = MakePositions(atoms, box, diameter)
                 posZ = posZ + r*cos(theta);
                 
                 
-                % check that new position is not within box
+                % check that new position is within box
                 if(posX > box(1,1) && posY > box(2,1) && posZ > box(3,1) && posX < box(1,2) && posY < box(2,2) && posZ < box(3,2))
                     break
                 % if not reset position and try again

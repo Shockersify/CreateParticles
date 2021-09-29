@@ -25,8 +25,18 @@ function file = MakeFile(atomMatrix, bondMatrix, atomTypes, bondTypes, masses, b
     end
     fprintf(fileID,'\n\nAtoms\n\n');
     % for each atom
-    for i = 1:atomMatrix(end,1)
-        fprintf(fileID,'%d\t%d\t%d\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%d\n',atomMatrix(i,1),atomMatrix(i,2),atomMatrix(i,3),atomMatrix(i,4),atomMatrix(i,5),atomMatrix(i,6),atomMatrix(i,7),atomMatrix(i,8),atomMatrix(i,9),atomMatrix(i,10),atomMatrix(i,11),atomMatrix(i,12));
+    [m,n] = size(atomMatrix);
+    for i = 1:m
+        for j = 1:n
+            if j < 3
+                fprintf(fileID,'%g\t',atomMatrix(i,j));
+            elseif j == n
+                fprintf(fileID,'%g\t',atomMatrix(i,j));
+            else
+                fprintf(fileID,'%f\t',atomMatrix(i,j));
+            end
+        end
+        fprintf(fileID,'\n');
     end
     % if bonds exist create the bonds section for each bond
     if(size(bondMatrix,1) > 0)
